@@ -31,4 +31,8 @@ spec:
               value: "PROJECT-ID"
             - name: VERTEX_AI_DATASTORE_ID
               value: "YOUR-DATASTORE-ID"
+            - name: GOOGLE_CLOUD_LOCATION
+              value: "global"
+            - name: GOOGLE_GENAI_USE_VERTEXAI
+              value: "true"
       serviceAccountName: fixmycar
