@@ -6,11 +6,12 @@ import com.google.cloud.discoveryengine.v1.SearchResponse.SearchResult;
 import com.google.cloud.discoveryengine.v1.SearchServiceClient;
 import com.google.cloud.discoveryengine.v1.SearchServiceSettings;
 import com.google.cloud.discoveryengine.v1.ServingConfigName;
-import com.google.cloud.vertexai.VertexAI;
-import com.google.cloud.vertexai.api.GenerateContentResponse;
-import com.google.cloud.vertexai.generativeai.preview.ChatSession;
-import com.google.cloud.vertexai.generativeai.preview.GenerativeModel;
-import com.google.cloud.vertexai.generativeai.preview.ResponseHandler;
+
+// 🔄 NEW Gen AI SDK imports
+import com.google.genai.Client;
+import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.HttpOptions;
+
 import com.google.protobuf.ListValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -33,7 +34,6 @@ public class FixMyCarBackendController {
   private String projectId;
   private String datastoreId;
 
-  // Get config values from application.properties
   @PostConstruct
   public void init() {
     projectId = config.getProjectId();
@@ -52,7 +52,6 @@ public class FixMyCarBackendController {
     return "ok";
   }
 
-  // Chat Endpoint - uses one of two helper functions based on vector DB choice
   @PostMapping(value = "/chat", consumes = "application/json", produces = "application/json")
   public ChatMessage message(@RequestBody ChatMessage message) {
     return ragVertexAISearch(message);
@@ -61,57 +60,77 @@ public class FixMyCarBackendController {
   public ChatMessage ragVertexAISearch(ChatMessage message) {
     // ⭐ Step 1 - Search
     logger.info("⭐ project Id: " + projectId);
-    String location = "global";
-    String collectionId = "default_collection";
+    final String location = "global";
+    final String collectionId = "default_collection";
     logger.info("⭐ Datastore ID is: " + datastoreId);
-    String servingConfigId = "default_search";
-    String searchQuery = message.getPrompt();
+    final String servingConfigId = "default_search";
+    final String searchQuery = message.getPrompt();
     logger.info("⭐ Datastore query: " + searchQuery);
-    // Note - discoveryengine is the underlying API for Vertex AI Search
-    String endpoint = String.format("discoveryengine.googleapis.com:443", location);
+
+    // discoveryengine endpoint (global)
+    final String endpoint = "discoveryengine.googleapis.com:443";
     String vectorSearchResults = "";
+
     try {
       SearchServiceSettings settings =
           SearchServiceSettings.newBuilder().setEndpoint(endpoint).build();
-      SearchServiceClient searchServiceClient = SearchServiceClient.create(settings);
-      SearchRequest request =
-          SearchRequest.newBuilder()
-              .setServingConfig(
-                  ServingConfigName.formatProjectLocationCollectionDataStoreServingConfigName(
-                      projectId, location, collectionId, datastoreId, servingConfigId))
-              .setQuery(searchQuery)
-              .setPageSize(10)
-              .build();
-      SearchResponse response = searchServiceClient.search(request).getPage().getResponse();
-      // Note - the Vertex AI Search API response is tricky to parse because it's a
-      // proto-based object (not JSON / REST response)
-      List<SearchResult> resultsList = response.getResultsList();
-      logger.info("🔍 Found " + resultsList.size() + " results.");
-      for (SearchResponse.SearchResult element : resultsList) {
-        Struct derivedStructData = element.getDocument().getDerivedStructData();
-        Map<String, Value> fields = derivedStructData.getFieldsMap();
-        Value extractiveAnswersValue = fields.get("extractive_answers");
-        ListValue listValue = extractiveAnswersValue.getListValue();
-        Value firstValue = listValue.getValues(0);
-        Struct structValue = firstValue.getStructValue();
-        Map<String, Value> innerFields = structValue.getFieldsMap();
-        Value contentValue = innerFields.get("content");
-        String stringValue = contentValue.getStringValue();
-        vectorSearchResults += stringValue;
+
+      final String servingConfig =
+          ServingConfigName.formatProjectLocationCollectionDataStoreServingConfigName(
+              projectId, location, collectionId, datastoreId, servingConfigId);
+
+      logger.info("🔧 Using servingConfig: " + servingConfig);
+
+      try (SearchServiceClient searchServiceClient = SearchServiceClient.create(settings)) {
+        SearchRequest request =
+            SearchRequest.newBuilder()
+                .setServingConfig(servingConfig)
+                .setQuery(searchQuery)
+                .setPageSize(10)
+                .build();
+
+        SearchResponse response = searchServiceClient.search(request).getPage().getResponse();
+        List<SearchResult> resultsList = response.getResultsList();
+        logger.info("🔍 Found " + resultsList.size() + " results.");
+
+        for (SearchResponse.SearchResult element : resultsList) {
+          Struct derivedStructData = element.getDocument().getDerivedStructData();
+          if (derivedStructData == null) continue;
+
+          Map<String, Value> fields = derivedStructData.getFieldsMap();
+          if (fields == null || !fields.containsKey("extractive_answers")) continue;
+
+          Value extractiveAnswersValue = fields.get("extractive_answers");
+          if (extractiveAnswersValue == null || !extractiveAnswersValue.hasListValue()) continue;
+
+          ListValue listValue = extractiveAnswersValue.getListValue();
+          if (listValue.getValuesCount() == 0) continue;
+
+          Value firstValue = listValue.getValues(0);
+          if (firstValue == null || !firstValue.hasStructValue()) continue;
+
+          Struct structValue = firstValue.getStructValue();
+          Map<String, Value> innerFields = structValue.getFieldsMap();
+          if (innerFields == null || !innerFields.containsKey("content")) continue;
+
+          Value contentValue = innerFields.get("content");
+          if (contentValue != null && contentValue.hasStringValue()) {
+            vectorSearchResults += contentValue.getStringValue() + "\n";
+          }
+        }
       }
     } catch (Exception e) {
-      logger.error("⚠️ Vertex AI Search Error: " + e);
+      logger.error("⚠️ Vertex AI Search Error: " + e.getClass().getName() + ": " + e.getMessage());
     }
 
-    // ⭐ Step 2 - Inference w/ augmented prompt
+    // ⭐ Step 2 - Inference w/ augmented prompt (Gemini via Gen AI SDK on Vertex AI)
     logger.info("🔍 Vertex AI Search results: " + vectorSearchResults);
     String result = geminiInference(message.getPrompt(), vectorSearchResults);
     message.setResponse(result);
     return message;
   }
 
-  // Helper function - calls Gemini to generate a response based on the augmented
-  // user prompt.
+  // Gemini via Google Gen AI SDK (Vertex AI mode)
   public String geminiInference(String userPrompt, String vectorSearchResults) {
     String geminiPrompt =
         "You are a helpful car manual chatbot. Answer the car owner's question about their car."
@@ -123,19 +142,24 @@ public class FixMyCarBackendController {
             + vectorSearchResults;
     logger.info("🔮 Gemini Prompt: " + geminiPrompt);
 
-    String geminiLocation = "us-central1";
-    String modelName = "gemini-pro";
-    try {
-      VertexAI vertexAI = new VertexAI(projectId, geminiLocation);
-      GenerateContentResponse response;
-      GenerativeModel model = new GenerativeModel(modelName, vertexAI);
-      ChatSession chatSession = new ChatSession(model);
-      response = chatSession.sendMessage(geminiPrompt);
-      String strResp = ResponseHandler.getText(response);
+    // modelId can be overridden via env GENAI_MODEL if потрібно
+    final String modelId =
+        System.getenv().getOrDefault("GENAI_MODEL", "gemini-2.5-flash");
+
+    try (Client client =
+        Client.builder()
+            .vertexAI(true) // важливо: працюємо через Vertex AI
+            .location(System.getenv().getOrDefault("GOOGLE_CLOUD_LOCATION", "global"))
+            .httpOptions(HttpOptions.builder().apiVersion("v1").build())
+            .build()) {
+
+      GenerateContentResponse resp =
+          client.models.generateContent(modelId, geminiPrompt, /*tools*/ null);
+      String strResp = resp.text();
       logger.info("🔮 Gemini Response: " + strResp);
       return strResp;
     } catch (Exception e) {
-      logger.error("⚠️ Gemini Error: " + e);
+      logger.error("⚠️ Gemini Error: " + e.getClass().getName() + ": " + e.getMessage());
       return e.getMessage();
     }
   }
