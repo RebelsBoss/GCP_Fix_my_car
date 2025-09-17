@@ -213,6 +213,10 @@ kubectl apply -f kubernetes/backend-service.yaml
 kubectl apply -f kubernetes/frontend-deployment.yaml
 kubectl apply -f kubernetes/frontend-service.yaml
 ```
+Також **бажано** додати у деплой наступну змінну оточення:
+```
+kubectl set env deployment/fixmycar-backend GOOGLE_CLOUD_PROJECT="your_project_id"
+```
 Для видалення:
 
 ```
