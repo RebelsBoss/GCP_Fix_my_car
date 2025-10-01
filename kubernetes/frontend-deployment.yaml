@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fixmycar-frontend
+  labels:
+    app: fixmycar-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fixmycar-frontend
+  template:
+    metadata:
+      labels:
+        app: fixmycar-frontend
+    spec:
+      containers:
+        - name: fixmycar-frontend
+          image: us-central1-docker.pkg.dev/test1-449514/fixmycar/frontend-vertex-ai-search:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8501
+          env:
+            - name: BACKEND_URL
+              value: "http://fixmycar-backend.default.svc.cluster.local:8080"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "2Gi"
