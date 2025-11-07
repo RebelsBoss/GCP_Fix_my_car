@@ -13,18 +13,18 @@ spec:
       serviceAccountName: fixmycar
       containers:
         - name: fixmycar-backend
-          image: us-central1-docker.pkg.dev/test1-449514/fixmycar/backend-vertex-ai-search:latest
+          image: us-central1-docker.pkg.dev/YOUR_PROJECT_ID/YOUR_ARTIFACT_REPO/backend-vertex-ai-search:latest
           imagePullPolicy: Always
           ports: [{ containerPort: 8080 }]
           env:
             - name: GOOGLE_CLOUD_PROJECT
-              value: "test1-449514"
+              value: "YOUR_PROJECT_ID"
             - name: GOOGLE_CLOUD_LOCATION
-              value: "global"
+              value: "YOUR_LOCATION"
             - name: GOOGLE_GENAI_USE_VERTEXAI
               value: "true"
             - name: VERTEX_AI_DATASTORE_ID
-              value: "confluence-crawler_1754919097875"
+              value: "YOUR_DATA_STORE"
           resources:
             requests:
               cpu: "100m"
