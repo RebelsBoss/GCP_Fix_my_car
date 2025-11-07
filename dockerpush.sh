@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="test1-449514"
-REGION="us-central1"
-REPO="fixmycar"
+PROJECT_ID="YOUR_PROJECT_ID"
+REGION="YOUR_REGION"
+REPO="YOUR_ARTIFACT_REPO"
 
 FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend-vertex-ai-search:latest"
 BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/backend-vertex-ai-search:latest"
