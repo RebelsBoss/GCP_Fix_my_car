@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: fixmycar-frontend
-          image: us-central1-docker.pkg.dev/test1-449514/fixmycar/frontend-vertex-ai-search:latest
+          image: us-central1-docker.pkg.dev/YOUR_PROJECT_ID/YOUR_ARTIFACT_REPO/frontend-vertex-ai-search:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8501
